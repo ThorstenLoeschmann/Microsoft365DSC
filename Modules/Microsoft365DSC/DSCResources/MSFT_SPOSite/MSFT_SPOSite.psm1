@@ -156,20 +156,10 @@ function Get-TargetResource
     #endregion
 
     $ConnectionMode = New-M365DSCConnection -Platform 'PnP' `
-                -InboundParameters $PSBoundParameters
+        -InboundParameters $PSBoundParameters
 
-    $nullReturn = @{
-        Url                   = $Url
-        Title                 = $Title
-        Template              = $Template
-        Ensure                = "Absent"
-        GlobalAdminAccount    = $GlobalAdminAccount
-        ApplicationId         = $ApplicationId
-        TenantId              = $TenantId
-        CertificatePassword   = $CertificatePassword
-        CertificatePath       = $CertificatePath
-        CertificateThumbprint = $CertificateThumbprint
-    }
+    $nullReturn = $PSBoundParameters
+    $nullReturn.Ensure = "Absent"
 
     try
     {
@@ -280,7 +270,26 @@ function Get-TargetResource
     }
     catch
     {
-        Write-Verbose -Message "The specified Site Collection {$Url} doesn't exist."
+        try
+        {
+            Write-Verbose -Message $_
+            $tenantIdValue = ""
+            if (-not [System.String]::IsNullOrEmpty($TenantId))
+            {
+                $tenantIdValue = $TenantId
+            }
+            elseif ($null -ne $GlobalAdminAccount)
+            {
+                $tenantIdValue = $GlobalAdminAccount.UserName.Split('@')[1]
+            }
+            Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+                -EventID 1 -Source $($MyInvocation.MyCommand.Source) `
+                -TenantId $tenantIdValue
+        }
+        catch
+        {
+            Write-Verbose -Message $_
+        }
         return $nullReturn
     }
 }
@@ -443,7 +452,7 @@ function Set-TargetResource
     #endregion
 
     $ConnectionMode = New-M365DSCConnection -Platform 'PnP' `
-                -InboundParameters $PSBoundParameters
+        -InboundParameters $PSBoundParameters
 
     $ConnectionParams = @{
         GlobalAdminAccount    = $GlobalAdminAccount
@@ -543,7 +552,7 @@ function Set-TargetResource
 
         Set-PnPTenantSite @UpdateParams -ErrorAction Stop
 
-        $site = Get-PnpTenantSite $Url
+        $site = Get-PnPTenantSite $Url
         #region Ad-Hoc properties
         if (-not [System.String]::IsNullOrEmpty($DenyAddAndCustomizePages))
         {
@@ -772,6 +781,15 @@ function Test-TargetResource
         [System.String]
         $CertificateThumbprint
     )
+    #region Telemetry
+    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
+    $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+    $data.Add("Resource", $ResourceName)
+    $data.Add("Method", $MyInvocation.MyCommand)
+    $data.Add("Principal", $GlobalAdminAccount.UserName)
+    $data.Add("TenantId", $TenantId)
+    Add-M365DSCTelemetryEvent -Data $data
+    #endregion
 
     Write-Verbose -Message "Testing configuration for site collection $Url"
     $CurrentValues = Get-TargetResource @PSBoundParameters
@@ -787,7 +805,7 @@ function Test-TargetResource
     $CurrentValues.Remove("CertificateThumbprint") | Out-Null
 
     $keysToCheck = $CurrentValues.Keys
-    $TestResult = Test-Microsoft365DSCParameterState -CurrentValues $CurrentValues `
+    $TestResult = Test-M365DSCParameterState -CurrentValues $CurrentValues `
         -Source $($MyInvocation.MyCommand.Source) `
         -DesiredValues $PSBoundParameters `
         -ValuesToCheck $keysToCheck
@@ -838,96 +856,123 @@ function Export-TargetResource
     #endregion
 
     $ConnectionMode = New-M365DSCConnection -Platform 'PnP' `
-                -InboundParameters $PSBoundParameters
+        -InboundParameters $PSBoundParameters
 
-    $sites = Get-PnPTenantSite | Where-Object -FilterScript { $_.Template -ne 'SRCHCEN#0' -and $_.Template -ne 'SPSMSITEHOST#0' }
-    $organization = ""
-    $principal = "" # Principal represents the "NetBios" name of the tenant (e.g. the M365DSC part of M365DSC.onmicrosoft.com)
-    if ($null -ne $GlobalAdminAccount -and $GlobalAdminAccount.UserName.Contains("@"))
+    try
     {
-        $organization = $GlobalAdminAccount.UserName.Split("@")[1]
-
-        if ($organization.IndexOf(".") -gt 0)
+        $sites = Get-PnPTenantSite -ErrorAction Stop | Where-Object -FilterScript { $_.Template -ne 'SRCHCEN#0' -and $_.Template -ne 'SPSMSITEHOST#0' }
+        $organization = ""
+        $principal = "" # Principal represents the "NetBios" name of the tenant (e.g. the M365DSC part of M365DSC.onmicrosoft.com)
+        if ($null -ne $GlobalAdminAccount -and $GlobalAdminAccount.UserName.Contains("@"))
         {
+            $organization = $GlobalAdminAccount.UserName.Split("@")[1]
+
+            if ($organization.IndexOf(".") -gt 0)
+            {
+                $principal = $organization.Split(".")[0]
+            }
+        }
+        else
+        {
+            $organization = $TenantId
             $principal = $organization.Split(".")[0]
         }
-    }
-    else
-    {
-        $organization = $TenantId
-        $principal = $organization.Split(".")[0]
-    }
-    $dscContent = ''
-    $i = 1
-    Write-Host "`r`n" -NoNewLine
-    foreach ($site in $sites)
-    {
-        $site = Get-PnPTenantSite -Url $site.Url
-        Write-Host "    [$i/$($sites.Length)] $($site.Url)" -NoNewLine
-        $siteTitle = "Null"
-        if (-not [System.String]::IsNullOrEmpty($site.Title))
+        $dscContent = ''
+        $i = 1
+        Write-Host "`r`n" -NoNewline
+        foreach ($site in $sites)
         {
-            $siteTitle = $site.Title
-        }
+            $site = Get-PnPTenantSite -Url $site.Url
+            Write-Host "    [$i/$($sites.Length)] $($site.Url)" -NoNewline
+            $siteTitle = "Null"
+            if (-not [System.String]::IsNullOrEmpty($site.Title))
+            {
+                $siteTitle = $site.Title
+            }
 
-        $Params = @{
-            Url                   = $site.Url
-            Template              = $site.Template
-            Owner                 = "admin@contoso.com" # Passing in bogus value to bypass null owner error
-            Title                 = $siteTitle
-            TimeZoneId            = $site.TimeZoneID
-            ApplicationId         = $ApplicationId
-            TenantId              = $TenantId
-            CertificatePassword   = $CertificatePassword
-            CertificatePath       = $CertificatePath
-            CertificateThumbprint = $CertificateThumbprint
-            GlobalAdminAccount    = $GlobalAdminAccount
-        }
+            $Params = @{
+                Url                   = $site.Url
+                Template              = $site.Template
+                Owner                 = "admin@contoso.com" # Passing in bogus value to bypass null owner error
+                Title                 = $siteTitle
+                TimeZoneId            = $site.TimeZoneID
+                ApplicationId         = $ApplicationId
+                TenantId              = $TenantId
+                CertificatePassword   = $CertificatePassword
+                CertificatePath       = $CertificatePath
+                CertificateThumbprint = $CertificateThumbprint
+                GlobalAdminAccount    = $GlobalAdminAccount
+            }
 
+            try
+            {
+                $Results = Get-TargetResource @Params
+
+                if ([System.String]::IsNullOrEmpty($Results.SharingDomainRestrictionMode))
+                {
+                    $Results.Remove("SharingDomainRestrictionMode") | Out-Null
+                }
+                if ([System.String]::IsNullOrEmpty($Results.RestrictedToRegion))
+                {
+                    $Results.Remove("RestrictedToRegion") | Out-Null
+                }
+                if ([System.String]::IsNullOrEmpty($Results.SharingAllowedDomainList))
+                {
+                    $Results.Remove("SharingAllowedDomainList") | Out-Null
+                }
+                if ([System.String]::IsNullOrEmpty($Results.SharingBlockedDomainList))
+                {
+                    $Results.Remove("SharingBlockedDomainList") | Out-Null
+                }
+                $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
+                    -Results $Results
+
+                $partialContent = Get-M365DSCExportContentForResource -ResourceName $ResourceName `
+                    -ConnectionMode $ConnectionMode `
+                    -ModulePath $PSScriptRoot `
+                    -Results $Results `
+                    -GlobalAdminAccount $GlobalAdminAccount
+                if ($partialContent.ToLower().Contains($organization.ToLower()) -or `
+                        $partialContent.ToLower().Contains($principal.ToLower()))
+                {
+                    $partialContent = $partialContent -ireplace [regex]::Escape('https://' + $principal + '.sharepoint.com/'), "https://`$(`$OrganizationName.Split('.')[0]).sharepoint.com/"
+                    $partialContent = $partialContent -ireplace [regex]::Escape("@" + $organization), "@`$(`$OrganizationName)"
+                }
+                $dscContent += $partialContent
+                Write-Host $Global:M365DSCEmojiGreenCheckMark
+            }
+            catch
+            {
+                Write-Host "$($Global:M365DSCEmojiYellowCircle) $_"
+            }
+            $i++
+        }
+        return $dscContent
+    }
+    catch
+    {
         try
         {
-            $Results = Get-TargetResource @Params
-
-            if ([System.String]::IsNullOrEmpty($Results.SharingDomainRestrictionMode))
+            Write-Verbose -Message $_
+            $tenantIdValue = ""
+            if (-not [System.String]::IsNullOrEmpty($TenantId))
             {
-                $Results.Remove("SharingDomainRestrictionMode") | Out-Null
+                $tenantIdValue = $TenantId
             }
-            if ([System.String]::IsNullOrEmpty($Results.RestrictedToRegion))
+            elseif ($null -ne $GlobalAdminAccount)
             {
-                $Results.Remove("RestrictedToRegion") | Out-Null
+                $tenantIdValue = $GlobalAdminAccount.UserName.Split('@')[1]
             }
-            if ([System.String]::IsNullOrEmpty($Results.SharingAllowedDomainList))
-            {
-                $Results.Remove("SharingAllowedDomainList") | Out-Null
-            }
-            if ([System.String]::IsNullOrEmpty($Results.SharingBlockedDomainList))
-            {
-                $Results.Remove("SharingBlockedDomainList") | Out-Null
-            }
-            $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
-                        -Results $Results
-
-            $partialContent = Get-M365DSCExportContentForResource -ResourceName $ResourceName `
-                        -ConnectionMode $ConnectionMode `
-                        -ModulePath $PSScriptRoot `
-                        -Results $Results `
-                        -GlobalAdminAccount $GlobalAdminAccount
-            if ($partialContent.ToLower().Contains($organization.ToLower()) -or `
-            $partialContent.ToLower().Contains($principal.ToLower()))
-            {
-                $partialContent = $partialContent -ireplace [regex]::Escape('https://' + $principal + '.sharepoint.com/'), "https://`$(`$OrganizationName.Split('.')[0]).sharepoint.com/"
-                $partialContent = $partialContent -ireplace [regex]::Escape("@" + $organization), "@`$(`$OrganizationName)"
-            }
-            $dscContent += $partialContent
-            Write-Host $Global:M365DSCEmojiGreenCheckMark
+            Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+                -EventID 1 -Source $($MyInvocation.MyCommand.Source) `
+                -TenantId $tenantIdValue
         }
         catch
         {
-            Write-Host "$($Global:M365DSCEmojiYellowCircle) $_"
+            Write-Verbose -Message $_
         }
-        $i++
+        return ""
     }
-    return $dscContent
 }
 
 Export-ModuleMember -Function *-TargetResource
