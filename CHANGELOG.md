@@ -1,12 +1,91 @@
 # Change log for Microsoft365DSC
 
+# 1.20.1216.1
+
+* O365User
+  * Added support for removing existing users with
+    Ensure = 'Absent';
+
+# 1.20.1209.1
+
+* IntuneAppProtectionPolicyiOS
+  * Initial Release;
+* IntuneDeviceCompliancePolicyiOS
+  * Initial Release;
+* IntuneDeviceConfigurationPolicyiOS
+  * Initial Release;
+* IntuneDeviceEnrollmentPlatformRestriction
+  * Initial Release;
+* IntuneDeviceEnrollmentLimitRestriction
+  * Initial Release;
+* TeamsTenantDialPlan
+  * Performance Improvements: retrieve all Voice Normalization
+    Rule at once and then iterated through them instead of
+    retrieving them for every instance.
+* DEPENDENCIES
+  * Upgraded ExchangeOnlineManagement to version 2.0.3;
+  * Upgraded Microsoft.Graph.Authentication to version 1.2.0;
+  * Upgraded Microsoft.Graph.Planner to version 1.2.0;
+  * Upgraded SharePointPnPPowerShellOnline to version
+    3.28.2012.0;
+
+## 1.20.1202.1
+
+* EXOOwaMailboxPolicy
+  * Fixed an issue trying to remove a policy;
+* TeamsMessagingPolicy
+  * Added AllowUserEditMessage property.
+* TeamsMeetingPolicy
+  * Added 'OrganizerOnly' as a support value for property
+    AutoAdmittedUsers.
+  * Temporarly removed the use of AllowAnonymousUsersToDialOut
+    since it is currently disabled on the API side.
+* EXPORT
+  * Fixed an issue where an Export using the -Workloads
+    parameter with a Service Principal did not export
+    any resource;
+* DEPENDENCIES
+  * Upgrade AzureADPreview to version 2.0.2.129;
+
+## 1.20.1125.1
+
+* AADRoleDefinition
+  * Initial Release;
+* O365User
+  * Fixes an issue where only the first O365User instance
+    extracted had the PSCredential Password property set
+    correctly;
+* TeamsMeetingPolicy
+  * Added the AllowBreakoutRooms, TeamsCameraFarEndPTZMode
+    & AllowMeetingReactions parameters;
+* DEPENDENCIES
+  * MSCloudLoginAssistant Updated to 1.0.42;
+  * Microsoft.PowerApps.Administration.PowerShell Updated
+    to 2.0.99;
+* MISC
+  * Moved the check for new version of module into the
+    Export-M365DSCConfiguration function for performance
+    improvements;
+
 ## 1.20.1118.1
 
+* EXOMalwareFilterPolicy
+  * Fix an issue when the CustomFromAddress is empty;
+    (Issue #901)
 * EXORemoteDomain
   * Fixed an issue where only non-null parameters are
     used in the Set-TargetResource resource;
     (Issue #898)
+* SCRetentionEventType
+  * Initial Release;
+* SPOSiteScript
+  * BREAKING CHANGE: Title is now the primary key for the
+    resource and Service Principal is now supported for
+    authentication.
 * MODULES
+  * M365DSCStringEncoding
+    New resource to handle encoding issues in exported content;
+    (Issue #904)
   * M365DSCLogEngine
     Added Export-M365DiagnosticData function to export diagnostic
     information to a Zip file.

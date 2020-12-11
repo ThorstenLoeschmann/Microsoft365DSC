@@ -76,7 +76,7 @@ function Get-TargetResource
 
         [Parameter()]
         [System.String]
-        [ValidateSet('EveryoneInCompany', 'Everyone', 'EveryoneInSameAndFederatedCompany')]
+        [ValidateSet('EveryoneInCompany', 'Everyone', 'EveryoneInSameAndFederatedCompany', 'OrganizerOnly')]
         $AutoAdmittedUsers,
 
         [Parameter()]
@@ -172,6 +172,19 @@ function Get-TargetResource
         $StreamingAttendeeMode = "Enabled",
 
         [Parameter()]
+        [System.Boolean]
+        $AllowBreakoutRooms,
+
+        [Parameter()]
+        [ValidateSet("Disabled", "Enabled")]
+        [System.String]
+        $TeamsCameraFarEndPTZMode,
+
+        [Parameter()]
+        [System.Boolean]
+        $AllowMeetingReactions,
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -246,6 +259,9 @@ function Get-TargetResource
             AllowUserToJoinExternalMeeting             = $policy.AllowUserToJoinExternalMeeting
             EnrollUserOverride                         = $policy.EnrollUserOverride
             StreamingAttendeeMode                      = $policy.StreamingAttendeeMode
+            AllowBreakoutRooms                         = $policy.AllowBreakoutRooms
+            TeamsCameraFarEndPTZMode                   = $policy.TeamsCameraFarEndPTZMode
+            AllowMeetingReactions                      = $policy.AllowMeetingReactions
             Ensure                                     = "Present"
             GlobalAdminAccount                         = $GlobalAdminAccount
         }
@@ -353,7 +369,7 @@ function Set-TargetResource
 
         [Parameter()]
         [System.String]
-        [ValidateSet('EveryoneInCompany', 'Everyone', 'EveryoneInSameAndFederatedCompany')]
+        [ValidateSet('EveryoneInCompany', 'Everyone', 'EveryoneInSameAndFederatedCompany', 'OrganizerOnly')]
         $AutoAdmittedUsers,
 
         [Parameter()]
@@ -449,6 +465,19 @@ function Set-TargetResource
         $StreamingAttendeeMode = "Enabled",
 
         [Parameter()]
+        [System.Boolean]
+        $AllowBreakoutRooms,
+
+        [Parameter()]
+        [ValidateSet("Disabled", "Enabled")]
+        [System.String]
+        $TeamsCameraFarEndPTZMode,
+
+        [Parameter()]
+        [System.Boolean]
+        $AllowMeetingReactions,
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -481,6 +510,13 @@ function Set-TargetResource
     if ($Ensure -eq 'Present' -and $CurrentValues.Ensure -eq 'Absent')
     {
         Write-Verbose -Message "Creating a new Teams Meeting Policy {$Identity}"
+
+        # The AllowAnonymousUsersToDialOut is temporarly disabled. Therefore
+        # we can't create or update a policy with it and it needs to be removed;
+        if ($SetParameters.ContainsKey("AllowAnonymousUsersToDialOut"))
+        {
+            $SetParameters.Remove("AllowAnonymousUsersToDialOut") | Out-Null
+        }
         New-CsTeamsMeetingPolicy @SetParameters
     }
     elseif ($Ensure -eq 'Present' -and $CurrentValues.Ensure -eq 'Present')
@@ -488,6 +524,13 @@ function Set-TargetResource
         # If we get here, it's because the Test-TargetResource detected a drift, therefore we always call
         # into the Set-CsTeamsMeetingPolicy cmdlet.
         Write-Verbose -Message "Updating settings for Teams Meeting Policy {$Identity}"
+
+        # The AllowAnonymousUsersToDialOut is temporarly disabled. Therefore
+        # we can't create or update a policy with it and it needs to be removed;
+        if ($SetParameters.ContainsKey("AllowAnonymousUsersToDialOut"))
+        {
+            $SetParameters.Remove("AllowAnonymousUsersToDialOut") | Out-Null
+        }
         Set-CsTeamsMeetingPolicy @SetParameters
     }
     elseif ($Ensure -eq 'Absent' -and $CurrentValues.Ensure -eq 'Present')
@@ -575,7 +618,7 @@ function Test-TargetResource
 
         [Parameter()]
         [System.String]
-        [ValidateSet('EveryoneInCompany', 'Everyone', 'EveryoneInSameAndFederatedCompany')]
+        [ValidateSet('EveryoneInCompany', 'Everyone', 'EveryoneInSameAndFederatedCompany', 'OrganizerOnly')]
         $AutoAdmittedUsers,
 
         [Parameter()]
@@ -671,6 +714,19 @@ function Test-TargetResource
         $StreamingAttendeeMode = "Enabled",
 
         [Parameter()]
+        [System.Boolean]
+        $AllowBreakoutRooms,
+
+        [Parameter()]
+        [ValidateSet("Disabled", "Enabled")]
+        [System.String]
+        $TeamsCameraFarEndPTZMode,
+
+        [Parameter()]
+        [System.Boolean]
+        $AllowMeetingReactions,
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -698,6 +754,10 @@ function Test-TargetResource
 
     $ValuesToCheck = $PSBoundParameters
     $ValuesToCheck.Remove('GlobalAdminAccount') | Out-Null
+    # The AllowAnonymousUsersToDialOut is temporarly disabled. Therefore
+    # we can't create or update a policy with it and it needs to be removed;
+    $ValuesToCheck.Remove("AllowAnonymousUsersToDialOut") | Out-Null
+
 
     $TestResult = Test-M365DSCParameterState -CurrentValues $CurrentValues `
         -Source $($MyInvocation.MyCommand.Source) `
